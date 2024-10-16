@@ -45,3 +45,8 @@ func UpdatePFtableCmd(tname string, ip string, action string) *Arkcmd {
 	cmd := &Arkcmd{"UpdateTable", "/sbin/pfctl", []string{"-t", tname, "-T", action, ip}}
 	return cmd
 }
+
+func PrepareCmd(name string, binpath string, opts []string) *Arkcmd {
+	cmd := &Arkcmd{name, binpath, opts}
+	return cmd
+}
