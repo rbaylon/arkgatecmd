@@ -41,6 +41,25 @@ func GetPFcmds(run_dir string) map[string]*Arkcmd {
 	return pfcmds
 }
 
+func GetServiceCmds(service string, binpath string, confdir string, configfile string) map[string]*Arkcmd {
+	cmds := make(map[string]*Arkcmd)
+	cmds["check"] = &Arkcmd{"CheckConf_" + service, binpath, []string{"-nf", configfile}}
+	cmds["backup"] = &Arkcmd{"BackupConf_" + service, "/bin/mv", []string{confdir + service + ".conf", confdir + service + ".conf.prev"}}
+	cmds["stage"] = &Arkcmd{"StageConf_" + service, "/bin/mv", []string{configfile, confdir + service + ".conf"}}
+	cmds["revert"] = &Arkcmd{"RevertConf_" + service, "/bin/mv", []string{confdir + service + ".conf.prev", confdir + service + ".conf"}}
+	return cmds
+}
+
+func GetRcCmds(service string) map[string]*Arkcmd {
+	cmds := make(map[string]*Arkcmd)
+	cmds["reload"] = &Arkcmd{"Reload_" + service, "/usr/sbin/rcctl", []string{"reload", service}}
+	cmds["stop"] = &Arkcmd{"Stop_" + service, "/usr/sbin/rcctl", []string{"stop", service}}
+	cmds["start"] = &Arkcmd{"Start_" + service, "/usr/sbin/rcctl", []string{"start", service}}
+	cmds["enable"] = &Arkcmd{"Enable_" + service, "/usr/sbin/rcctl", []string{"enable", service}}
+	cmds["disable"] = &Arkcmd{"Disable_" + service, "/usr/sbin/rcctl", []string{"disable", service}}
+	return cmds
+}
+
 func UpdatePFtableCmd(tname string, ip string, action string) *Arkcmd {
 	cmd := &Arkcmd{"UpdateTable", "/sbin/pfctl", []string{"-t", tname, "-T", action, ip}}
 	return cmd
