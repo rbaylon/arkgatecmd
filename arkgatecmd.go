@@ -44,6 +44,9 @@ func GetPFcmds(run_dir string) map[string]*Arkcmd {
 func GetServiceCmds(service string, binpath string, confdir string, configfile string) map[string]*Arkcmd {
 	cmds := make(map[string]*Arkcmd)
 	cmds["check"] = &Arkcmd{"CheckConf_" + service, binpath, []string{"-nf", configfile}}
+	// check_unbound is for unbound-checkconf, which takes the config file
+	// as a plain positional argument and doesn't accept/need "-nf".
+	cmds["check_unbound"] = &Arkcmd{"CheckConf_" + service, binpath, []string{configfile}}
 	cmds["backup"] = &Arkcmd{"BackupConf_" + service, "/bin/mv", []string{confdir + service + ".conf", confdir + service + ".conf.prev"}}
 	cmds["stage"] = &Arkcmd{"StageConf_" + service, "/bin/mv", []string{configfile, confdir + service + ".conf"}}
 	cmds["revert"] = &Arkcmd{"RevertConf_" + service, "/bin/mv", []string{confdir + service + ".conf.prev", confdir + service + ".conf"}}
