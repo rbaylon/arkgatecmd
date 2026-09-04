@@ -53,6 +53,7 @@ func GetServiceCmds(service string, binpath string, confdir string, configfile s
 func GetRcCmds(service string) map[string]*Arkcmd {
 	cmds := make(map[string]*Arkcmd)
 	cmds["reload"] = &Arkcmd{"Reload_" + service, "/usr/sbin/rcctl", []string{"reload", service}}
+	cmds["restart"] = &Arkcmd{"Restart_" + service, "/usr/sbin/rcctl", []string{"restart", service}}
 	cmds["stop"] = &Arkcmd{"Stop_" + service, "/usr/sbin/rcctl", []string{"stop", service}}
 	cmds["start"] = &Arkcmd{"Start_" + service, "/usr/sbin/rcctl", []string{"start", service}}
 	cmds["enable"] = &Arkcmd{"Enable_" + service, "/usr/sbin/rcctl", []string{"enable", service}}
