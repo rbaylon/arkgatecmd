@@ -12,7 +12,17 @@ type Arkcmd struct {
 	Opts []string `json:"opts"`
 }
 
+// SendCmd sends c over conn and waits for arkgated's "OK" acknowledgement.
+// conn is nil whenever the caller's dial/handshake to arkgated failed (see
+// e.g. srvcman's utils.GetArkConn, which logs the failure and returns nil
+// rather than an error) - callers pass that straight through as
+// c.SendCmd(GetArkConn()), so this has to treat nil as an ordinary failure
+// (return an error) rather than dereferencing it, or every caller crashes
+// the whole process any time arkgated is briefly unreachable.
 func (c *Arkcmd) SendCmd(conn net.Conn) error {
+	if conn == nil {
+		return errors.New("arkgated: no connection")
+	}
 	defer conn.Close()
 	bufc, _ := json.Marshal(c)
 	_, err := conn.Write(bufc)
