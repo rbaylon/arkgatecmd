@@ -3,6 +3,8 @@ package arkgatecmd
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net"
 )
 
@@ -10,6 +12,27 @@ type Arkcmd struct {
 	Name string   `json:"name"`
 	Cmd  string   `json:"cmd"`
 	Opts []string `json:"opts"`
+}
+
+// arkcmdWithOutput is the wire shape SendCmdOutput sends: c's own fields
+// plus want_output=true (Go's encoding/json flattens an embedded struct's
+// fields into the same JSON object), telling arkgated's worker to reply
+// with the command's captured output instead of a bare "OK"/"NOK". Arkcmd
+// itself doesn't carry this field, so every existing positional
+// Arkcmd{name, cmd, opts} literal in this file (GetPFcmds et al.) stays
+// valid - only SendCmdOutput needs it, and only at send time.
+type arkcmdWithOutput struct {
+	Arkcmd
+	WantOutput bool `json:"want_output"`
+}
+
+// outputResponse mirrors arkgated's own outputResponse type (main.go):
+// {ok, output, error} - what SendCmdOutput unmarshals arkgated's reply
+// into.
+type outputResponse struct {
+	OK     bool   `json:"ok"`
+	Output string `json:"output"`
+	Error  string `json:"error"`
 }
 
 // SendCmd sends c over conn and waits for arkgated's "OK" acknowledgement.
@@ -39,6 +62,45 @@ func (c *Arkcmd) SendCmd(conn net.Conn) error {
 		return errors.New(ret)
 	}
 	return nil
+}
+
+// SendCmdOutput behaves like SendCmd but also returns the command's
+// captured output text - use this for commands whose whole point is the
+// output (e.g. ping/traceroute diagnostics, ifconfig/netstat interface
+// stats) rather than a bare success/failure. It reads the full response via
+// io.ReadAll (arkgated closes the connection right after writing its
+// reply, so this terminates on EOF) instead of a fixed-size buffer, since
+// output can be arbitrarily long - unlike SendCmd, which only ever expects
+// a short "OK"/"NOK". As with SendCmd, conn may be nil if the caller's
+// dial/handshake to arkgated failed, and that's handled the same way.
+func (c *Arkcmd) SendCmdOutput(conn net.Conn) (string, error) {
+	if conn == nil {
+		return "", errors.New("arkgated: no connection")
+	}
+	defer conn.Close()
+	wire := arkcmdWithOutput{Arkcmd: *c, WantOutput: true}
+	bufc, err := json.Marshal(wire)
+	if err != nil {
+		return "", err
+	}
+	if _, err := conn.Write(bufc); err != nil {
+		return "", err
+	}
+	raw, err := io.ReadAll(conn)
+	if err != nil {
+		return "", err
+	}
+	var resp outputResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return "", fmt.Errorf("arkgated: malformed response: %w", err)
+	}
+	if !resp.OK {
+		if resp.Error != "" {
+			return resp.Output, errors.New(resp.Error)
+		}
+		return resp.Output, errors.New("arkgated: command failed")
+	}
+	return resp.Output, nil
 }
 
 func GetPFcmds(run_dir string) map[string]*Arkcmd {
