@@ -133,6 +133,11 @@ func GetRcCmds(service string) map[string]*Arkcmd {
 	cmds["start"] = &Arkcmd{"Start_" + service, "/usr/sbin/rcctl", []string{"start", service}}
 	cmds["enable"] = &Arkcmd{"Enable_" + service, "/usr/sbin/rcctl", []string{"enable", service}}
 	cmds["disable"] = &Arkcmd{"Disable_" + service, "/usr/sbin/rcctl", []string{"disable", service}}
+	// status uses rcctl check, which exits 0 with "<service>(ok)" on
+	// stdout if running, non-zero with "<service>(failed)" otherwise -
+	// callers that want that text (not just a bare OK/NOK) should send
+	// this via SendCmdOutput rather than SendCmd.
+	cmds["status"] = &Arkcmd{"Status_" + service, "/usr/sbin/rcctl", []string{"check", service}}
 	return cmds
 }
 
