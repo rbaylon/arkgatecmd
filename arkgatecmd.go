@@ -150,3 +150,94 @@ func PrepareCmd(name string, binpath string, opts []string) *Arkcmd {
 	cmd := &Arkcmd{name, binpath, opts}
 	return cmd
 }
+
+// ActiveHealthCheck is one in-flight HealthPing, as reported by
+// GetActiveHealthChecks - mirrors arkgated's own arkcommand.ActiveInfo.
+// Duplicated here rather than imported, the same reason this whole package
+// exists: a caller only needs this client library, not arkgated's internal
+// source, to talk to it.
+type ActiveHealthCheck struct {
+	ID        uint64 `json:"id"`
+	Name      string `json:"name"`
+	Cmd       string `json:"cmd"`
+	Remote    string `json:"remote"`
+	RunningMs int64  `json:"running_ms"`
+}
+
+// ActiveHealthChecksSnapshot is GetActiveHealthChecks' result - mirrors
+// arkgated's arkcommand.ActiveSnapshot. Count is how many HealthPing
+// connections are currently in flight (what a dashboard shows as its
+// headline number); TotalCount is every tracked command regardless of name,
+// for context on how much of arkgated's overall in-flight budget health
+// checks account for.
+type ActiveHealthChecksSnapshot struct {
+	Count      int                 `json:"count"`
+	TotalCount int                 `json:"total_count"`
+	Commands   []ActiveHealthCheck `json:"commands"`
+}
+
+// GetActiveHealthChecks asks arkgated how many HealthPing connections are
+// currently in flight (and which ones, longest-running first) - the data
+// source for a "stuck health checks" dashboard panel.
+//
+// Unlike SendCmd/SendCmdOutput, this and ClearActiveHealthChecks parse the
+// response as a bare JSON object of their own shape, not arkgated's
+// {ok,output,error} outputResponse - "ActiveHealthChecks"/"ClearHealthChecks"
+// are administrative queries answered directly by arkgated's connection
+// handler, never routed through the exec path SendCmdOutput's shape belongs
+// to. conn may be nil if the caller's dial/handshake to arkgated failed
+// (see SendCmd's doc comment) and is handled the same way.
+func GetActiveHealthChecks(conn net.Conn) (ActiveHealthChecksSnapshot, error) {
+	var snap ActiveHealthChecksSnapshot
+	if conn == nil {
+		return snap, errors.New("arkgated: no connection")
+	}
+	defer conn.Close()
+	b, err := json.Marshal(Arkcmd{Name: "ActiveHealthChecks"})
+	if err != nil {
+		return snap, err
+	}
+	if _, err := conn.Write(b); err != nil {
+		return snap, err
+	}
+	raw, err := io.ReadAll(conn)
+	if err != nil {
+		return snap, err
+	}
+	if err := json.Unmarshal(raw, &snap); err != nil {
+		return snap, fmt.Errorf("arkgated: malformed ActiveHealthChecks response: %w", err)
+	}
+	return snap, nil
+}
+
+// ClearActiveHealthChecks tells arkgated to terminate every currently
+// in-flight HealthPing (killing its whole process group, not just the ping
+// binary's direct invocation) and reports how many it cleared - the
+// administrative action behind a dashboard's "clear stuck health checks"
+// button. Same trust model as any other Arkcmd: whatever gates the
+// transport (Unix socket permissions, or the mTLS client cert) is the only
+// thing standing between a caller and this action.
+func ClearActiveHealthChecks(conn net.Conn) (int, error) {
+	if conn == nil {
+		return 0, errors.New("arkgated: no connection")
+	}
+	defer conn.Close()
+	b, err := json.Marshal(Arkcmd{Name: "ClearHealthChecks"})
+	if err != nil {
+		return 0, err
+	}
+	if _, err := conn.Write(b); err != nil {
+		return 0, err
+	}
+	raw, err := io.ReadAll(conn)
+	if err != nil {
+		return 0, err
+	}
+	var resp struct {
+		Cleared int `json:"cleared"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return 0, fmt.Errorf("arkgated: malformed ClearHealthChecks response: %w", err)
+	}
+	return resp.Cleared, nil
+}
